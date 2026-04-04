@@ -29,7 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
-APP_VERSION = '1.2.0'
+APP_VERSION = '1.2.1'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
@@ -580,9 +580,19 @@ def admin():
         return redirect(url_for('schedule'))
 
     users = User.query.order_by(User.callsign).all()
-    bookings = Booking.query.order_by(Booking.date, Booking.hour).all()
+    local_tz = get_local_tz()
+    now_local = datetime.now(local_tz)
+    today_local = now_local.date()
+    current_hour = now_local.hour
+    # Show only future bookings: today with hour >= current, or future dates
+    bookings = Booking.query.filter(
+        db.or_(
+            Booking.date > today_local,
+            db.and_(Booking.date == today_local, Booking.hour >= current_hour)
+        )
+    ).order_by(Booking.date, Booking.hour).all()
     blocked_slots = BlockedSlot.query.filter(
-        BlockedSlot.date >= date.today()
+        BlockedSlot.date >= today_local
     ).order_by(BlockedSlot.date, BlockedSlot.hour).all()
     config = RadioConfig.query.first()
     return render_template('admin.html', users=users, bookings=bookings, blocked_slots=blocked_slots, config=config)
