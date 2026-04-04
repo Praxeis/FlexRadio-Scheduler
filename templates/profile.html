@@ -27,6 +27,12 @@
                 <form method="POST">
                     <input type="hidden" name="action" value="update_profile">
                     <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="email" name="email"
+                               value="{{ current_user.email or '' }}" placeholder="you@example.com">
+                        <div class="form-text">Used for password resets and schedule reminders.</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="zerotier_node_id" class="form-label">ZeroTier Node ID</label>
                         <input type="text" class="form-control font-monospace" id="zerotier_node_id"
                                name="zerotier_node_id" maxlength="10"

@@ -333,11 +333,17 @@ def profile():
             return redirect(url_for('profile'))
 
         # Default: update profile fields
+        email = request.form.get('email', '').strip()
+        if email and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            flash('Please enter a valid email address.', 'danger')
+            return redirect(url_for('profile'))
+
         zt_node = request.form.get('zerotier_node_id', '').strip().lower()
         if zt_node and not re.match(r'^[0-9a-f]{10}$', zt_node):
             flash('ZeroTier Node ID must be exactly 10 hex characters.', 'danger')
             return redirect(url_for('profile'))
 
+        current_user.email = email
         current_user.zerotier_node_id = zt_node
         db.session.commit()
         flash('Profile updated.', 'success')
