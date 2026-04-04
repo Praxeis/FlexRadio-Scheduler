@@ -29,7 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
-APP_VERSION = '1.0.0'
+APP_VERSION = '1.1.0'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
@@ -546,7 +546,41 @@ def admin():
     blocked_slots = BlockedSlot.query.filter(
         BlockedSlot.date >= date.today()
     ).order_by(BlockedSlot.date, BlockedSlot.hour).all()
-    return render_template('admin.html', users=users, bookings=bookings, blocked_slots=blocked_slots)
+    config = RadioConfig.query.first()
+    return render_template('admin.html', users=users, bookings=bookings, blocked_slots=blocked_slots, config=config)
+
+
+@app.route('/admin/settings', methods=['POST'])
+@login_required
+def admin_settings():
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('schedule'))
+
+    config = RadioConfig.query.first()
+
+    # Monthly hour limits
+    try:
+        config.default_monthly_hours = int(request.form.get('default_monthly_hours', 0))
+    except (ValueError, TypeError):
+        config.default_monthly_hours = 0
+
+    # Timezone
+    tz_value = request.form.get('site_timezone', '').strip()
+    if tz_value:
+        try:
+            ZoneInfo(tz_value)
+            config.site_timezone = tz_value
+        except (KeyError, Exception):
+            flash('Invalid timezone selected.', 'danger')
+
+    # Email (Resend)
+    config.resend_api_key = request.form.get('resend_api_key', '').strip()
+    config.sender_email = request.form.get('sender_email', '').strip()
+
+    db.session.commit()
+    flash('Settings saved.', 'success')
+    return redirect(url_for('admin'))
 
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
@@ -794,7 +828,7 @@ def maintenance_on():
         config.maintenance_until = None
     db.session.commit()
     flash('Maintenance mode enabled.', 'success')
-    return redirect(url_for('admin_radio'))
+    return redirect(url_for('admin'))
 
 
 @app.route('/admin/maintenance/off', methods=['POST'])
@@ -810,7 +844,7 @@ def maintenance_off():
     config.maintenance_until = None
     db.session.commit()
     flash('Maintenance mode disabled.', 'success')
-    return redirect(url_for('admin_radio'))
+    return redirect(url_for('admin'))
 
 
 # --- Block-out routes ---
@@ -994,7 +1028,7 @@ def club_branding():
             config.club_logo_filename = ''
             db.session.commit()
             flash('Logo removed.', 'success')
-        return redirect(url_for('admin_radio'))
+        return redirect(url_for('admin'))
 
     # Handle logo upload
     logo_file = request.files.get('club_logo')
@@ -1004,7 +1038,7 @@ def club_branding():
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
         if ext not in ALLOWED_IMAGE_EXTENSIONS:
             flash('Invalid image format. Allowed: PNG, JPG, GIF, SVG, WebP, ICO.', 'danger')
-            return redirect(url_for('admin_radio'))
+            return redirect(url_for('admin'))
         # Remove old logo if different
         if config.club_logo_filename and config.club_logo_filename != filename:
             old_path = os.path.join(app.static_folder, 'uploads', config.club_logo_filename)
@@ -1018,7 +1052,7 @@ def club_branding():
 
     db.session.commit()
     flash('Club branding updated.', 'success')
-    return redirect(url_for('admin_radio'))
+    return redirect(url_for('admin'))
 
 
 # --- Schedule reminders ---
@@ -1098,24 +1132,9 @@ def admin_radio():
         config.zerotier_network_id = request.form.get('zerotier_network_id', '').strip()
         config.zerotier_api_token = request.form.get('zerotier_api_token', '').strip()
         try:
-            config.default_monthly_hours = int(request.form.get('default_monthly_hours', 0))
-        except (ValueError, TypeError):
-            config.default_monthly_hours = 0
-        try:
             config.check_interval = max(5, int(request.form.get('check_interval', 30)))
         except (ValueError, TypeError):
             config.check_interval = 30
-        # Timezone
-        tz_value = request.form.get('site_timezone', '').strip()
-        if tz_value:
-            try:
-                ZoneInfo(tz_value)  # validate it's a real timezone
-                config.site_timezone = tz_value
-            except (KeyError, Exception):
-                flash('Invalid timezone selected.', 'danger')
-        # Email (Resend)
-        config.resend_api_key = request.form.get('resend_api_key', '').strip()
-        config.sender_email = request.form.get('sender_email', '').strip()
         db.session.commit()
 
         # Restart monitor connection with new settings
