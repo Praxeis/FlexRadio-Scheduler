@@ -29,7 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
-APP_VERSION = '1.2.1'
+APP_VERSION = '1.2.2'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
