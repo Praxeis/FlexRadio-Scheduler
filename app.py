@@ -29,7 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
-APP_VERSION = '1.1.0'
+APP_VERSION = '1.2.0'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
@@ -119,6 +119,44 @@ with app.app_context():
 # Start the radio monitor
 radio_monitor = RadioMonitor(app)
 radio_monitor.start()
+
+
+# --- Daily reminder scheduler ---
+
+def send_daily_reminders():
+    """Send reminder emails for all bookings tomorrow. Runs daily at 5pm local."""
+    with app.app_context():
+        local_tz = get_local_tz()
+        tomorrow = (datetime.now(local_tz) + timedelta(days=1)).date()
+
+        bookings = Booking.query.filter(Booking.date == tomorrow).all()
+
+        for booking in bookings:
+            user = db.session.get(User, booking.user_id)
+            if not user or not user.email:
+                continue
+
+            time_str = f"{booking.hour:02d}:00 - {booking.hour + 1:02d}:00" if booking.hour < 23 else "23:00 - 00:00"
+            date_str = tomorrow.strftime('%A, %B %d, %Y')
+
+            html = render_template('email_reminder.html', user=user, date_str=date_str,
+                                   time_str=time_str, booking=booking)
+            send_email(user.email, f'Upcoming Booking Reminder — {date_str}', html)
+
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+reminder_scheduler = BackgroundScheduler(daemon=True)
+with app.app_context():
+    site_tz = get_local_tz()
+reminder_scheduler.add_job(
+    send_daily_reminders,
+    CronTrigger(hour=17, minute=0, timezone=site_tz),  # 5:00 PM site timezone
+    id='daily_reminders',
+    replace_existing=True
+)
+reminder_scheduler.start()
 
 
 # --- Auth routes ---

@@ -4,3 +4,4 @@ Flask-Login==0.6.3
 requests==2.32.3
 resend==2.0.0
 itsdangerous==2.2.0
+APScheduler==3.10.4
