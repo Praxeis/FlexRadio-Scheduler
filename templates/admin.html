@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Admin Dashboard</h3>
+    <a href="{{ url_for('admin_radio') }}" class="btn btn-outline-primary">Radio Configuration</a>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header"><h5>Registered Members ({{ users|length }})</h5></div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Callsign</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>ZeroTier Node</th>
+                            <th>Status</th>
+                            <th>Role</th>
+                            <th>Monthly Hours</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr{% if user.is_banned %} class="table-danger"{% endif %}>
+                            <td>{{ user.callsign }}</td>
+                            <td>{{ user.name }}</td>
+                            <td>{{ user.email or '' }}</td>
+                            <td>
+                                {% if user.zerotier_node_id %}
+                                <code>{{ user.zerotier_node_id }}</code>
+                                {% else %}
+                                <span class="text-muted small">Not set</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.is_banned %}
+                                <span class="badge bg-danger">Banned</span>
+                                {% if user.ban_reason %}<br><small class="text-muted">{{ user.ban_reason }}</small>{% endif %}
+                                {% elif not user.is_approved %}
+                                <span class="badge bg-info">Pending Approval</span>
+                                {% else %}
+                                <span class="badge bg-success">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>{% if user.is_admin %}<span class="badge bg-warning">Admin</span>{% else %}Member{% endif %}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('set_hours', user_id=user.id) }}" class="input-group input-group-sm" style="width:140px">
+                                    <input type="number" name="monthly_hour_limit" class="form-control" min="0"
+                                           value="{{ user.monthly_hour_limit }}" placeholder="0=default" title="0 = system default">
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm">Set</button>
+                                </form>
+                            </td>
+                            <td>
+                                {% if user.id != current_user.id %}
+                                {% if not user.is_approved %}
+                                <div class="d-flex flex-wrap gap-1 mb-1">
+                                    <form method="POST" action="{{ url_for('approve_user', user_id=user.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-success"
+                                                onclick="return confirm('Approve {{ user.callsign }}?')">
+                                            Approve
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('deny_user', user_id=user.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                onclick="return confirm('Deny and remove {{ user.callsign }}?')">
+                                            Deny
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                                <div class="d-flex flex-wrap gap-1">
+                                    <form method="POST" action="{{ url_for('toggle_admin', user_id=user.id) }}" class="d-inline">
+                                        {% if user.is_admin %}
+                                        <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                onclick="return confirm('Demote {{ user.callsign }} to Member?')">
+                                            Demote
+                                        </button>
+                                        {% else %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success"
+                                                onclick="return confirm('Promote {{ user.callsign }} to Admin?')">
+                                            Promote
+                                        </button>
+                                        {% endif %}
+                                    </form>
+                                    {% if user.is_banned %}
+                                    <form method="POST" action="{{ url_for('unban_user', user_id=user.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-success"
+                                                onclick="return confirm('Unban {{ user.callsign }}?')">
+                                            Unban
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                            onclick="document.getElementById('ban-row-{{ user.id }}').classList.toggle('d-none')">
+                                        Ban
+                                    </button>
+                                    <form method="POST" action="{{ url_for('kick_user', user_id=user.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-dark"
+                                                onclick="return confirm('Kick {{ user.callsign }}? This will disconnect them and cancel their current booking.')">
+                                            Kick
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-danger"
+                                                onclick="return confirm('Delete {{ user.callsign }}? This will also remove all their bookings.')">
+                                            Delete
+                                        </button>
+                                    </form>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            onclick="document.getElementById('reset-pw-row-{{ user.id }}').classList.toggle('d-none')">
+                                        Reset PW
+                                    </button>
+                                </div>
+                                <!-- Ban reason row (hidden by default) -->
+                                <div id="ban-row-{{ user.id }}" class="d-none mt-2">
+                                    <form method="POST" action="{{ url_for('ban_user', user_id=user.id) }}" class="input-group input-group-sm">
+                                        <input type="text" name="ban_reason" class="form-control" placeholder="Reason (optional)">
+                                        <button type="submit" class="btn btn-danger"
+                                                onclick="return confirm('Ban {{ user.callsign }}? All future bookings will be cancelled.')">
+                                            Confirm Ban
+                                        </button>
+                                    </form>
+                                </div>
+                                <!-- Reset password row (hidden by default) -->
+                                <div id="reset-pw-row-{{ user.id }}" class="d-none mt-2">
+                                    <form method="POST" action="{{ url_for('reset_password', user_id=user.id) }}" class="input-group input-group-sm">
+                                        <input type="password" name="new_password" class="form-control" placeholder="New password" minlength="4" required>
+                                        <button type="submit" class="btn btn-secondary"
+                                                onclick="return confirm('Reset password for {{ user.callsign }}?')">
+                                            Reset
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header"><h5>Upcoming Bookings</h5></div>
+            <div class="card-body p-0">
+                {% if bookings %}
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Member</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in bookings %}
+                        <tr>
+                            <td>{{ booking.date.strftime('%m/%d/%Y') }}</td>
+                            <td>{{ '%02d:00'|format(booking.hour) }}</td>
+                            <td>{{ booking.user.callsign }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('admin_cancel', booking_id=booking.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Cancel this booking?')">Cancel</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="p-3 text-muted">No bookings yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Block-Out Dates Section -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><h5>Block Out Time</h5></div>
+            <div class="card-body">
+                <p class="text-muted small">Block slots for contests, events, or maintenance. Existing bookings in the range will be cancelled.</p>
+                <form method="POST" action="{{ url_for('block_slots') }}">
+                    <div class="row mb-2">
+                        <div class="col">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" required>
+                        </div>
+                        <div class="col">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date">
+                            <div class="form-text">Leave blank for single day.</div>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col">
+                            <label for="start_hour" class="form-label">Start Hour</label>
+                            <select class="form-select" id="start_hour" name="start_hour">
+                                {% for h in range(24) %}
+                                <option value="{{ h }}">{{ '%02d:00'|format(h) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="end_hour" class="form-label">End Hour</label>
+                            <select class="form-select" id="end_hour" name="end_hour">
+                                {% for h in range(24) %}
+                                <option value="{{ h }}" {% if h == 23 %}selected{% endif %}>{{ '%02d:00'|format(h) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reason" class="form-label">Reason / Label</label>
+                        <input type="text" class="form-control" id="reason" name="reason" placeholder="e.g. Field Day, Contest, Maintenance">
+                    </div>
+                    <button type="submit" class="btn btn-danger"
+                            onclick="return confirm('Block these slots? Any existing bookings will be cancelled.')">
+                        Block Slots
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><h5>Blocked Slots</h5></div>
+            <div class="card-body p-0">
+                {% if blocked_slots %}
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Hour</th>
+                            <th>Reason</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for slot in blocked_slots %}
+                        <tr>
+                            <td>{{ slot.date.strftime('%m/%d/%Y') }}</td>
+                            <td>{{ '%02d:00'|format(slot.hour) }}</td>
+                            <td>{{ slot.reason }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('unblock_slot', blocked_id=slot.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Unblock</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="p-3 text-muted">No blocked slots.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

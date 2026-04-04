@@ -1,0 +1,138 @@
+/* Solar / Propagation bar */
+.solar-bar {
+    background-color: #1a1a2e;
+    color: #c0c0c0;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.85rem;
+    padding: 4px 0;
+    letter-spacing: 0.5px;
+}
+
+.solar-callsign {
+    color: #fbbf24;
+    font-weight: 700;
+}
+
+.solar-item {
+    color: #a0aec0;
+}
+
+.solar-item strong {
+    color: #e2e8f0;
+}
+
+.solar-item.site-info {
+    color: #8899aa;
+}
+
+.solar-divider {
+    color: #4a5568;
+}
+
+.on-air-callsign {
+    color: #718096;
+}
+
+.on-air-callsign.active {
+    color: #48bb78;
+}
+
+/* Schedule table */
+.schedule-table {
+    font-size: 0.85rem;
+}
+
+.schedule-table th,
+.schedule-table td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.time-col {
+    white-space: nowrap;
+    width: 120px;
+    font-weight: 600;
+}
+
+.day-col {
+    min-width: 110px;
+}
+
+/* Slot states */
+.slot-cell {
+    height: 50px;
+    transition: background-color 0.15s;
+}
+
+.slot-cell.available {
+    background-color: #f0fdf4;
+}
+
+.slot-cell.available:hover {
+    background-color: #dcfce7;
+}
+
+.slot-cell.my-booking {
+    background-color: #dbeafe;
+}
+
+.slot-cell.other-booking {
+    background-color: #fef3c7;
+}
+
+/* Today highlight */
+.today-header {
+    background-color: #1d4ed8 !important;
+}
+
+.today-col {
+    border-left: 2px solid #3b82f6;
+    border-right: 2px solid #3b82f6;
+}
+
+/* Book button */
+.book-btn {
+    font-size: 0.75rem;
+    padding: 2px 10px;
+}
+
+.booking-info {
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+/* Legend */
+.legend-item {
+    margin-right: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.legend-box {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #ccc;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.legend-box.available {
+    background-color: #f0fdf4;
+}
+
+.legend-box.my-booking {
+    background-color: #dbeafe;
+}
+
+.legend-box.other-booking {
+    background-color: #fef3c7;
+}
+
+/* Blocked slots */
+.slot-cell.blocked {
+    background-color: #fecaca;
+}
+
+.legend-box.blocked {
+    background-color: #fecaca;
+}

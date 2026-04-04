@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Radio Configuration</h3>
+
+<!-- Club Branding Card -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Club Branding</h5></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('club_branding') }}" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="save">
+            {% if config.club_logo_filename %}
+            <div class="mb-3">
+                <label class="form-label">Current Logo</label><br>
+                <img src="{{ url_for('static', filename='uploads/' + config.club_logo_filename) }}"
+                     alt="Club Logo" height="48" class="border rounded p-1">
+                <span class="ms-2 text-muted small">{{ config.club_logo_filename }}</span>
+            </div>
+            {% endif %}
+            <div class="mb-3">
+                <label for="club_logo" class="form-label">{{ 'Replace' if config.club_logo_filename else 'Upload' }} Logo</label>
+                <input type="file" class="form-control" id="club_logo" name="club_logo"
+                       accept=".png,.jpg,.jpeg,.gif,.svg,.webp,.ico">
+                <div class="form-text">Accepted formats: PNG, JPG, GIF, SVG, WebP, ICO.</div>
+            </div>
+            <div class="mb-3">
+                <label for="club_website" class="form-label">Club Website URL</label>
+                <input type="url" class="form-control" id="club_website" name="club_website"
+                       value="{{ config.club_website or '' }}" placeholder="https://www.example.org">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save Branding</button>
+            </div>
+        </form>
+        {% if config.club_logo_filename %}
+        <form method="POST" action="{{ url_for('club_branding') }}" class="mt-2">
+            <input type="hidden" name="action" value="delete_logo">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('Remove the club logo?')">
+                Delete Logo
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Maintenance Mode Card -->
+<div class="card mb-4 {% if config.maintenance_mode %}border-warning{% endif %}">
+    <div class="card-header bg-{% if config.maintenance_mode %}warning text-dark{% else %}light{% endif %}">
+        <h5 class="mb-0">Maintenance Mode {% if config.maintenance_mode %}<span class="badge bg-danger">ACTIVE</span>{% endif %}</h5>
+    </div>
+    <div class="card-body">
+        {% if config.maintenance_mode %}
+        <p><strong>Message:</strong> {{ config.maintenance_message }}</p>
+        {% if config.maintenance_until %}
+        <p><strong>Scheduled until:</strong> {{ config.maintenance_until.strftime('%Y-%m-%d %H:%M') }}</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('maintenance_off') }}">
+            <button type="submit" class="btn btn-success"
+                    onclick="return confirm('Disable maintenance mode and resume normal operation?')">
+                Disable Maintenance Mode
+            </button>
+        </form>
+        {% else %}
+        <p class="text-muted">When active, all clients are disconnected, ZeroTier nodes are deauthorized, and bookings are blocked.</p>
+        <form method="POST" action="{{ url_for('maintenance_on') }}">
+            <div class="mb-3">
+                <label for="maintenance_message" class="form-label">Message to display</label>
+                <input type="text" class="form-control" id="maintenance_message" name="maintenance_message"
+                       placeholder="e.g. Scheduled maintenance — back at 1800 UTC" value="">
+            </div>
+            <div class="mb-3">
+                <label for="maintenance_until" class="form-label">Auto-disable at (optional)</label>
+                <input type="datetime-local" class="form-control" id="maintenance_until" name="maintenance_until">
+                <div class="form-text">Leave blank for indefinite maintenance (must be disabled manually).</div>
+            </div>
+            <button type="submit" class="btn btn-warning"
+                    onclick="return confirm('Enable maintenance mode? All users will be disconnected.')">
+                Enable Maintenance Mode
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><h5>FlexRadio Connection</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <!-- Connection Mode -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Connection Mode</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="connection_mode" id="mode_direct"
+                                   value="direct" {% if config.connection_mode == 'direct' %}checked{% endif %}
+                                   onchange="toggleMode()">
+                            <label class="form-check-label" for="mode_direct">
+                                Direct LAN — scheduler is on the same network as the radio
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="connection_mode" id="mode_relay"
+                                   value="relay" {% if config.connection_mode == 'relay' %}checked{% endif %}
+                                   onchange="toggleMode()">
+                            <label class="form-check-label" for="mode_relay">
+                                Remote Relay — scheduler connects through a relay agent at the radio site
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Direct LAN fields -->
+                    <div id="direct-fields">
+                        <div class="mb-3">
+                            <label for="radio_host" class="form-label">Radio IP Address</label>
+                            <input type="text" class="form-control" id="radio_host" name="radio_host"
+                                   value="{{ config.radio_host }}" placeholder="192.168.1.100">
+                            <div class="form-text">
+                                Use the FlexRadio's ZeroTier IP if the scheduler is also on the ZeroTier network.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="radio_port" class="form-label">TCP Port</label>
+                            <input type="number" class="form-control" id="radio_port" name="radio_port"
+                                   value="{{ config.radio_port }}" placeholder="4992">
+                        </div>
+                    </div>
+
+                    <!-- Remote Relay fields -->
+                    <div id="relay-fields">
+                        <div class="mb-3">
+                            <label for="relay_url" class="form-label">Relay URL</label>
+                            <input type="text" class="form-control" id="relay_url" name="relay_url"
+                                   value="{{ config.relay_url }}" placeholder="http://your-relay-ip:5001">
+                            <div class="form-text">
+                                The URL of the relay agent running at the radio site.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="relay_api_key" class="form-label">API Key</label>
+                            <input type="password" class="form-control" id="relay_api_key" name="relay_api_key"
+                                   value="{{ config.relay_api_key }}" placeholder="Shared secret key">
+                            <div class="form-text">
+                                Must match the --api-key used when starting the relay agent.
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="enforcement_enabled"
+                               name="enforcement_enabled" {% if config.enforcement_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="enforcement_enabled">
+                            Enable schedule enforcement
+                        </label>
+                        <div class="form-text">
+                            When enabled, the system will automatically disconnect unauthorized SmartSDR users
+                            and enforce time slot boundaries via the FlexRadio TCP API.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="check_interval" class="form-label">Enforcement Check Interval (seconds)</label>
+                        <input type="number" class="form-control" id="check_interval" name="check_interval"
+                               value="{{ config.check_interval or 30 }}" min="5" max="300">
+                        <div class="form-text">
+                            How often the monitor checks connected clients. Lower = faster enforcement but more load. Minimum 5 seconds.
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h5 class="mt-3">Monthly Hour Limits</h5>
+                    <div class="mb-3">
+                        <label for="default_monthly_hours" class="form-label">Default Monthly Hours per Member</label>
+                        <input type="number" class="form-control" id="default_monthly_hours" name="default_monthly_hours"
+                               value="{{ config.default_monthly_hours or 0 }}" min="0">
+                        <div class="form-text">
+                            System-wide default. Set to 0 for unlimited. Individual limits can be set per user on the Admin page.
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- ZeroTier Configuration -->
+                    <h5 class="mt-3">ZeroTier Network Access Control</h5>
+                    <p class="text-muted small">
+                        When enabled, the scheduler will authorize/deauthorize members on the ZeroTier network
+                        based on the schedule. Only the user with the current booking gets network access.
+                    </p>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="zerotier_enabled"
+                               name="zerotier_enabled" {% if config.zerotier_enabled %}checked{% endif %}
+                               onchange="toggleZT()">
+                        <label class="form-check-label" for="zerotier_enabled">
+                            Enable ZeroTier access control
+                        </label>
+                    </div>
+
+                    <div id="zt-fields">
+                        <div class="mb-3">
+                            <label for="zerotier_network_id" class="form-label">ZeroTier Network ID</label>
+                            <input type="text" class="form-control font-monospace" id="zerotier_network_id"
+                                   name="zerotier_network_id"
+                                   value="{{ config.zerotier_network_id }}"
+                                   placeholder="e.g. 8056c2e21c000001" maxlength="16">
+                            <div class="form-text">
+                                The 16-character network ID from your ZeroTier Central dashboard.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="zerotier_api_token" class="form-label">ZeroTier API Token</label>
+                            <input type="password" class="form-control" id="zerotier_api_token"
+                                   name="zerotier_api_token"
+                                   value="{{ config.zerotier_api_token }}"
+                                   placeholder="Your ZeroTier Central API token">
+                            <div class="form-text">
+                                Generate at <a href="https://my.zerotier.com/account" target="_blank">my.zerotier.com/account</a>
+                                &rarr; API Access Tokens. Needs read/write access to the network.
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h5 class="mt-3">Site Timezone</h5>
+                    <div class="mb-3">
+                        <label for="site_timezone" class="form-label">Timezone</label>
+                        <select class="form-select" id="site_timezone" name="site_timezone">
+                            {% set tz_options = [
+                                ('US/Hawaii', 'Hawaii (HST)'),
+                                ('US/Alaska', 'Alaska (AKST/AKDT)'),
+                                ('America/Los_Angeles', 'Pacific (PST/PDT)'),
+                                ('America/Phoenix', 'Arizona (MST, no DST)'),
+                                ('America/Denver', 'Mountain (MST/MDT)'),
+                                ('America/Chicago', 'Central (CST/CDT)'),
+                                ('America/New_York', 'Eastern (EST/EDT)'),
+                                ('America/Puerto_Rico', 'Atlantic (AST)'),
+                                ('Pacific/Guam', 'Guam (ChST)'),
+                                ('Pacific/Samoa', 'Samoa (SST)'),
+                                ('Europe/London', 'London (GMT/BST)'),
+                                ('Europe/Berlin', 'Central Europe (CET/CEST)'),
+                                ('Europe/Moscow', 'Moscow (MSK)'),
+                                ('Asia/Tokyo', 'Japan (JST)'),
+                                ('Asia/Shanghai', 'China (CST)'),
+                                ('Australia/Sydney', 'Sydney (AEST/AEDT)'),
+                                ('Pacific/Auckland', 'New Zealand (NZST/NZDT)'),
+                            ] %}
+                            {% for tz_val, tz_label in tz_options %}
+                            <option value="{{ tz_val }}" {% if config.site_timezone == tz_val %}selected{% endif %}>{{ tz_label }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            All schedule times will be displayed in this timezone.
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Relay Setup Instructions -->
+        <div class="card mb-4" id="relay-instructions">
+            <div class="card-header"><h5>Relay Agent Setup</h5></div>
+            <div class="card-body">
+                <p>To use Remote Relay mode, run the relay agent on a computer at the radio site
+                   (same LAN as the FlexRadio):</p>
+                <pre class="bg-dark text-light p-3 rounded"><code>python relay_agent.py --radio-ip 192.168.1.100 --api-key YOUR_SECRET_KEY</code></pre>
+                <p class="mb-1"><strong>Options:</strong></p>
+                <ul class="small mb-0">
+                    <li><code>--radio-ip</code> — FlexRadio IP on the LAN (required)</li>
+                    <li><code>--api-key</code> — shared secret key (required, must match above)</li>
+                    <li><code>--radio-port</code> — radio TCP port (default: 4992)</li>
+                    <li><code>--host</code> — relay bind address (default: 0.0.0.0)</li>
+                    <li><code>--port</code> — relay HTTP port (default: 5001)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ZeroTier Setup Guide -->
+        <div class="card mb-4" id="zt-instructions">
+            <div class="card-header"><h5>ZeroTier Setup Guide</h5></div>
+            <div class="card-body">
+                <p class="fw-bold">How it works:</p>
+                <ol class="small">
+                    <li>Create a ZeroTier network at <a href="https://my.zerotier.com" target="_blank">my.zerotier.com</a></li>
+                    <li>Install ZeroTier on the FlexRadio PC and join the network — <strong>keep this node always authorized</strong></li>
+                    <li>Each club member installs ZeroTier and joins the same network</li>
+                    <li>Members enter their ZeroTier Node ID when they register (or admin adds it later)</li>
+                    <li>When a member's time slot starts, the scheduler authorizes their node on the network</li>
+                    <li>When the slot ends, the scheduler deauthorizes their node</li>
+                    <li>Members point SmartSDR at the FlexRadio's ZeroTier IP during their slot</li>
+                </ol>
+                <div class="alert alert-warning small mb-0">
+                    <strong>Important:</strong> Make sure the FlexRadio host node and the scheduler server node
+                    are <strong>always authorized</strong> on the ZeroTier network (not managed by the scheduler).
+                    Only add club member node IDs to user accounts — the scheduler will manage their authorization.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header"><h5>Monitor Status</h5></div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Connection Mode</strong></td>
+                        <td>
+                            {% if config.connection_mode == 'relay' %}
+                            <span class="badge bg-primary">Remote Relay</span>
+                            {% else %}
+                            <span class="badge bg-info">Direct LAN</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Radio Enforcement</strong></td>
+                        <td>
+                            {% if status.enforcement_enabled %}
+                            <span class="badge bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disabled</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Radio Connection</strong></td>
+                        <td>
+                            {% if status.radio_connected %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disconnected</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Connected Clients</strong></td>
+                        <td>
+                            {% if status.connected_clients %}
+                            {% for client in status.connected_clients %}
+                            <span class="badge bg-info">{{ client.get('callsign', '?') }}</span>
+                            {% endfor %}
+                            {% else %}
+                            <span class="text-muted">None</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Current Booking</strong></td>
+                        <td>
+                            {% if status.current_booking %}
+                            {{ status.current_booking.callsign }} ({{ status.current_booking.name }})
+                            {% else %}
+                            <span class="text-muted">No booking this hour</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- ZeroTier Status -->
+                <h6 class="mt-3">ZeroTier Status</h6>
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>ZeroTier Control</strong></td>
+                        <td>
+                            {% if status.zerotier_enabled %}
+                            <span class="badge bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disabled</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if status.zerotier_enabled %}
+                    <tr>
+                        <td><strong>API Connection</strong></td>
+                        <td>
+                            {% if status.zerotier_connected %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disconnected</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if status.zerotier_network_name %}
+                    <tr>
+                        <td><strong>Network Name</strong></td>
+                        <td>{{ status.zerotier_network_name }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if status.zerotier_last_action %}
+                    <tr>
+                        <td><strong>Last Action</strong></td>
+                        <td><small>{{ status.zerotier_last_action }}</small></td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
+                </table>
+
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Last Check</strong></td>
+                        <td>{{ status.last_check or 'Never' }}</td>
+                    </tr>
+                    {% if status.last_error %}
+                    <tr>
+                        <td><strong>Last Error</strong></td>
+                        <td><span class="text-danger">{{ status.last_error }}</span></td>
+                    </tr>
+                    {% endif %}
+                </table>
+
+                <a href="{{ url_for('admin_radio') }}" class="btn btn-outline-secondary btn-sm">Refresh Status</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<a href="{{ url_for('admin') }}" class="btn btn-outline-secondary">&larr; Back to Admin</a>
+
+<script>
+function toggleMode() {
+    const isRelay = document.getElementById('mode_relay').checked;
+    document.getElementById('direct-fields').style.display = isRelay ? 'none' : 'block';
+    document.getElementById('relay-fields').style.display = isRelay ? 'block' : 'none';
+    document.getElementById('relay-instructions').style.display = isRelay ? 'block' : 'none';
+}
+function toggleZT() {
+    const ztEnabled = document.getElementById('zerotier_enabled').checked;
+    document.getElementById('zt-fields').style.display = ztEnabled ? 'block' : 'none';
+    document.getElementById('zt-instructions').style.display = ztEnabled ? 'block' : 'none';
+}
+toggleMode();
+toggleZT();
+</script>
+{% endblock %}

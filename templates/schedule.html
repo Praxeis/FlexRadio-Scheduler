@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not current_user.is_approved %}
+<div class="alert alert-warning text-center fw-bold">
+    Your account is pending admin approval. You can view the schedule but cannot book slots until approved.
+</div>
+{% endif %}
+<!-- Radio Status Banner -->
+<div id="radio-status-banner" class="alert mb-3 d-none">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <strong id="radio-status-icon"></strong>
+            <span id="radio-status-text"></span>
+        </div>
+        <div id="radio-time-remaining" class="fw-bold"></div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{{ url_for('schedule', week=prev_week.isoformat()) }}" class="btn btn-outline-secondary">&larr; Previous Week</a>
+    <h4 class="mb-0">
+        {{ week_start.strftime('%b %d') }} &ndash; {{ days[-1].strftime('%b %d, %Y') }}
+    </h4>
+    <a href="{{ url_for('schedule', week=next_week.isoformat()) }}" class="btn btn-outline-secondary">Next Week &rarr;</a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-bordered schedule-table">
+        <thead class="table-dark">
+            <tr>
+                <th class="time-col">Time</th>
+                {% for day in days %}
+                <th class="day-col {% if day == today %}today-header{% endif %}">
+                    {{ day.strftime('%a') }}<br>{{ day.strftime('%m/%d') }}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for hour in hours %}
+            <tr>
+                <td class="time-col">{{ '%02d:00'|format(hour) }} &ndash; {{ '%02d:00'|format(hour + 1 if hour < 23 else 0) }}</td>
+                {% for day in days %}
+                {% set booking = booking_map.get((day, hour)) %}
+                {% set blocked = blocked_map.get((day, hour)) %}
+                <td class="slot-cell {% if day == today %}today-col{% endif %} {% if blocked %}blocked{% elif booking %}{% if booking.user_id == current_user.id %}my-booking{% else %}other-booking{% endif %}{% else %}available{% endif %}">
+                    {% if blocked %}
+                        <div class="booking-info">
+                            <strong class="text-danger">{{ blocked.reason }}</strong>
+                        </div>
+                    {% elif booking %}
+                        <div class="booking-info">
+                            <strong>{{ booking.user.callsign }}</strong>
+                            <br><small>{{ booking.user.name }}</small>
+                        </div>
+                        {% if booking.user_id == current_user.id %}
+                        <form method="POST" action="{{ url_for('cancel', booking_id=booking.id) }}" class="mt-1">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                    onclick="return confirm('Cancel this booking?')">Cancel</button>
+                        </form>
+                        {% endif %}
+                    {% elif not is_maintenance %}
+                        {% set slot_past = (day < now_local.date()) or (day == now_local.date() and hour <= now_local.hour) %}
+                        {% if slot_past %}
+                            <span class="text-muted small">—</span>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('book') }}">
+                            <input type="hidden" name="date" value="{{ day.isoformat() }}">
+                            <input type="hidden" name="hour" value="{{ hour }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success book-btn">Book</button>
+                        </form>
+                        {% endif %}
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3 d-flex flex-wrap align-items-center gap-2">
+    <span class="legend-item"><span class="legend-box available"></span> Available</span>
+    <span class="legend-item"><span class="legend-box my-booking"></span> Your Booking</span>
+    <span class="legend-item"><span class="legend-box other-booking"></span> Booked by Others</span>
+    <span class="legend-item"><span class="legend-box blocked"></span> Blocked</span>
+    <span class="ms-3 text-muted">Max 2 slots per day</span>
+    <span class="ms-3 text-muted">
+        Monthly: {{ monthly_used }} hr{{ 's' if monthly_used != 1 else '' }} used
+        {% if monthly_limit > 0 %} / {{ monthly_limit }} hr limit{% else %} (unlimited){% endif %}
+    </span>
+</div>
+
+<script>
+function updateRadioStatus() {
+    fetch('{{ url_for("radio_status") }}')
+        .then(r => r.json())
+        .then(data => {
+            const banner = document.getElementById('radio-status-banner');
+            const icon = document.getElementById('radio-status-icon');
+            const text = document.getElementById('radio-status-text');
+            const timeEl = document.getElementById('radio-time-remaining');
+
+            if (!data.enforcement_enabled) {
+                banner.classList.add('d-none');
+                return;
+            }
+
+            banner.classList.remove('d-none');
+
+            if (!data.radio_connected) {
+                banner.className = 'alert alert-secondary mb-3';
+                icon.textContent = 'Radio:';
+                text.textContent = ' Not connected to FlexRadio';
+                timeEl.textContent = '';
+                return;
+            }
+
+            const clients = data.connected_clients || [];
+            const clientNames = clients.map(c => c.callsign).join(', ');
+
+            if (data.warning_5min) {
+                banner.className = 'alert alert-danger mb-3';
+                icon.textContent = 'WARNING:';
+                text.textContent = ' Less than 5 minutes remaining in this slot!';
+            } else if (data.warning_10min) {
+                banner.className = 'alert alert-warning mb-3';
+                icon.textContent = 'Notice:';
+                text.textContent = ' Less than 10 minutes remaining in this slot.';
+            } else if (data.current_booking) {
+                banner.className = 'alert alert-info mb-3';
+                icon.textContent = 'On Air:';
+                text.textContent = ' ' + data.current_callsign + (clients.length > 0 ? ' (connected)' : ' (not connected)');
+            } else {
+                banner.className = 'alert alert-secondary mb-3';
+                icon.textContent = 'Radio:';
+                text.textContent = clients.length > 0 ? ' Connected: ' + clientNames : ' Idle - no booking this hour';
+            }
+
+            if (data.minutes_remaining !== null && data.current_booking) {
+                timeEl.textContent = data.minutes_remaining + ' min remaining';
+            } else {
+                timeEl.textContent = '';
+            }
+        })
+        .catch(() => {});
+}
+
+updateRadioStatus();
+setInterval(updateRadioStatus, 15000);
+</script>
+{% endblock %}
