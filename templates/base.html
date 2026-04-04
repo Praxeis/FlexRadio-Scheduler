@@ -83,7 +83,6 @@
         {% block content %}{% endblock %}
     </div>
 
-    {% if club_logo_filename or club_website %}
     <footer class="text-center text-muted py-3 mt-4 border-top">
         {% if club_website %}
         <a href="{{ club_website }}" target="_blank" rel="noopener">
@@ -95,8 +94,8 @@
         {% elif club_logo_filename %}
         <img src="{{ url_for('static', filename='uploads/' + club_logo_filename) }}" alt="Club Logo" height="24">
         {% endif %}
+        <div class="small mt-1">v{{ app_version }}</div>
     </footer>
-    {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>

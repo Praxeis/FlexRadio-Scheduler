@@ -29,6 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
+APP_VERSION = '1.0.0'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
@@ -56,7 +57,8 @@ def inject_globals():
         club_logo_filename=(config.club_logo_filename or '') if config else '',
         club_website=(config.club_website or '') if config else '',
         site_timezone=(config.site_timezone or DEFAULT_TZ) if config else DEFAULT_TZ,
-        now_local=datetime.now(local_tz)
+        now_local=datetime.now(local_tz),
+        app_version=APP_VERSION
     )
 
 
