@@ -87,3 +87,6 @@ class RadioConfig(db.Model):
     club_website = db.Column(db.String(300), default='')
     # Timezone
     site_timezone = db.Column(db.String(50), default='America/Los_Angeles')
+    # Email (Resend)
+    resend_api_key = db.Column(db.String(200), default='')
+    sender_email = db.Column(db.String(200), default='')

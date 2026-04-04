@@ -254,6 +254,27 @@
                         </div>
                     </div>
 
+                    <hr>
+                    <h5 class="mt-3">Email Configuration (Resend)</h5>
+                    <p class="text-muted small">
+                        Used for password reset emails and schedule reminders.
+                        Sign up at <a href="https://resend.com" target="_blank">resend.com</a>,
+                        verify your domain, and paste the API key below.
+                    </p>
+                    <div class="mb-3">
+                        <label for="resend_api_key" class="form-label">Resend API Key</label>
+                        <input type="password" class="form-control" id="resend_api_key" name="resend_api_key"
+                               value="{{ config.resend_api_key }}" placeholder="re_xxxxxxxxxx">
+                    </div>
+                    <div class="mb-3">
+                        <label for="sender_email" class="form-label">Sender Email Address</label>
+                        <input type="email" class="form-control" id="sender_email" name="sender_email"
+                               value="{{ config.sender_email }}" placeholder="scheduler@k6arp-radio.org">
+                        <div class="form-text">
+                            Must be from a domain verified in your Resend account.
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Save Configuration</button>
                 </form>
             </div>

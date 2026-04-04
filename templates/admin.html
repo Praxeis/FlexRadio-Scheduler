@@ -2,7 +2,15 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Admin Dashboard</h3>
-    <a href="{{ url_for('admin_radio') }}" class="btn btn-outline-primary">Radio Configuration</a>
+    <div class="d-flex gap-2">
+        <form method="POST" action="{{ url_for('send_reminders') }}" class="d-inline">
+            <button type="submit" class="btn btn-outline-info"
+                    onclick="return confirm('Send reminder emails to all members with bookings in the next 24 hours?')">
+                Send Reminders
+            </button>
+        </form>
+        <a href="{{ url_for('admin_radio') }}" class="btn btn-outline-primary">Radio Configuration</a>
+    </div>
 </div>
 
 <div class="row">

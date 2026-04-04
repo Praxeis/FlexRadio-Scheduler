@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #333;">Password Reset Request</h2>
+    <p>Hi {{ user.name }} ({{ user.callsign }}),</p>
+    <p>We received a request to reset your password for the FlexRadio Scheduler.</p>
+    <p>
+        <a href="{{ reset_url }}"
+           style="display: inline-block; padding: 12px 24px; background-color: #0d6efd;
+                  color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Reset My Password
+        </a>
+    </p>
+    <p style="color: #666; font-size: 14px;">
+        This link will expire in 1 hour. If you didn't request this, you can safely ignore this email.
+    </p>
+    <p style="color: #999; font-size: 12px;">
+        If the button doesn't work, copy and paste this URL into your browser:<br>
+        {{ reset_url }}
+    </p>
+    <hr style="border: none; border-top: 1px solid #eee;">
+    <p style="color: #999; font-size: 12px;">FlexRadio Scheduler</p>
+</body>
+</html>

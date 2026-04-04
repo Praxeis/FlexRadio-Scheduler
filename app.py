@@ -6,6 +6,9 @@ import xml.etree.ElementTree as ET
 from datetime import date, timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 
+import resend
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+
 DEFAULT_TZ = 'America/Los_Angeles'
 
 
@@ -90,6 +93,8 @@ with app.app_context():
         ('club_logo_filename', "VARCHAR(200) DEFAULT 'carp-logo.png'"),
         ('club_website', "VARCHAR(300) DEFAULT 'https://www.k6arp.org'"),
         ('site_timezone', "VARCHAR(50) DEFAULT 'America/Los_Angeles'"),
+        ('resend_api_key', "VARCHAR(200) DEFAULT ''"),
+        ('sender_email', "VARCHAR(200) DEFAULT ''"),
     ]:
         if col_name not in rc_cols:
             db.session.execute(text(f"ALTER TABLE radio_config ADD COLUMN {col_name} {col_def}"))
@@ -197,6 +202,103 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+
+# --- Email helper ---
+
+def send_email(to_email, subject, html_body):
+    """Send an email via Resend. Returns True on success, error string on failure."""
+    config = RadioConfig.query.first()
+    if not config or not config.resend_api_key or not config.sender_email:
+        return 'Email is not configured. Ask an admin to set up email in Radio settings.'
+    resend.api_key = config.resend_api_key
+    try:
+        resend.Emails.send({
+            "from": config.sender_email,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+        })
+        return True
+    except Exception as e:
+        return str(e)
+
+
+def generate_reset_token(user_id):
+    s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+    return s.dumps(user_id, salt='password-reset')
+
+
+def verify_reset_token(token, max_age=3600):
+    s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+    try:
+        user_id = s.loads(token, salt='password-reset', max_age=max_age)
+        return user_id
+    except (SignatureExpired, BadSignature):
+        return None
+
+
+# --- Password reset routes ---
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('schedule'))
+
+    if request.method == 'POST':
+        identifier = request.form.get('identifier', '').strip()
+        # Look up by callsign or email
+        user = User.query.filter_by(callsign=identifier.upper()).first()
+        if not user:
+            user = User.query.filter_by(email=identifier).first()
+
+        if user and user.email:
+            token = generate_reset_token(user.id)
+            reset_url = url_for('reset_password_token', token=token, _external=True)
+            html = render_template('email_reset.html', user=user, reset_url=reset_url)
+            result = send_email(user.email, 'Password Reset — FlexRadio Scheduler', html)
+            if result is not True:
+                flash(f'Could not send email: {result}', 'danger')
+                return redirect(url_for('forgot_password'))
+
+        # Always show success to avoid revealing which accounts exist
+        flash('If an account with that callsign or email exists, a reset link has been sent.', 'info')
+        return redirect(url_for('login'))
+
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password_token(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('schedule'))
+
+    user_id = verify_reset_token(token)
+    if not user_id:
+        flash('Invalid or expired reset link. Please request a new one.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    user = db.session.get(User, user_id)
+    if not user:
+        flash('User not found.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if len(password) < 4:
+            flash('Password must be at least 4 characters.', 'danger')
+            return redirect(url_for('reset_password_token', token=token))
+        if password != confirm:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('reset_password_token', token=token))
+
+        user.set_password(password)
+        db.session.commit()
+        flash('Password has been reset. You can now log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
 
 
 # --- Profile route ---
@@ -911,6 +1013,61 @@ def club_branding():
     return redirect(url_for('admin_radio'))
 
 
+# --- Schedule reminders ---
+
+@app.route('/admin/send_reminders', methods=['POST'])
+@login_required
+def send_reminders():
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('schedule'))
+
+    local_tz = get_local_tz()
+    now_local = datetime.now(local_tz)
+    tomorrow_local = now_local + timedelta(hours=24)
+
+    # Find all bookings in the next 24 hours
+    today = now_local.date()
+    tomorrow_date = tomorrow_local.date()
+
+    bookings = Booking.query.filter(
+        Booking.date.between(today, tomorrow_date)
+    ).all()
+
+    sent = 0
+    errors = 0
+    for booking in bookings:
+        # Check if this booking is within the next 24 hours
+        slot_start = datetime(booking.date.year, booking.date.month, booking.date.day,
+                              booking.hour, 0, 0, tzinfo=local_tz)
+        if slot_start < now_local or slot_start > tomorrow_local:
+            continue
+
+        user = db.session.get(User, booking.user_id)
+        if not user or not user.email:
+            continue
+
+        time_str = f"{booking.hour:02d}:00 - {booking.hour + 1:02d}:00" if booking.hour < 23 else "23:00 - 00:00"
+        date_str = booking.date.strftime('%A, %B %d, %Y')
+
+        html = render_template('email_reminder.html', user=user, date_str=date_str,
+                               time_str=time_str, booking=booking)
+        result = send_email(user.email, f'Upcoming Booking Reminder — {date_str}', html)
+        if result is True:
+            sent += 1
+        else:
+            errors += 1
+
+    if errors:
+        flash(f'Sent {sent} reminder(s), {errors} failed.', 'warning')
+    elif sent:
+        flash(f'Sent {sent} reminder(s) for the next 24 hours.', 'success')
+    else:
+        flash('No upcoming bookings in the next 24 hours to remind about.', 'info')
+
+    return redirect(url_for('admin'))
+
+
 # --- Admin radio config ---
 
 @app.route('/admin/radio', methods=['GET', 'POST'])
@@ -948,6 +1105,9 @@ def admin_radio():
                 config.site_timezone = tz_value
             except (KeyError, Exception):
                 flash('Invalid timezone selected.', 'danger')
+        # Email (Resend)
+        config.resend_api_key = request.form.get('resend_api_key', '').strip()
+        config.sender_email = request.form.get('sender_email', '').strip()
         db.session.commit()
 
         # Restart monitor connection with new settings
