@@ -60,7 +60,7 @@
                         </form>
                         {% endif %}
                     {% elif not is_maintenance %}
-                        {% set slot_past = (day < now_local.date()) or (day == now_local.date() and hour <= now_local.hour) %}
+                        {% set slot_past = (day < now_local.date()) or (day == now_local.date() and hour < now_local.hour) %}
                         {% if slot_past %}
                             <span class="text-muted small">—</span>
                         {% else %}

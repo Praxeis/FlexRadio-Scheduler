@@ -29,7 +29,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import db, User, Booking, BlockedSlot, RadioConfig
 from radio_monitor import RadioMonitor
 
-APP_VERSION = '1.2.2'
+APP_VERSION = '1.2.3'
 MAX_SLOTS_PER_DAY = 2
 
 app = Flask(__name__)
@@ -494,10 +494,10 @@ def book():
     book_date = date.fromisoformat(request.form['date'])
     book_hour = int(request.form['hour'])
 
-    # Check if slot is in the past (Pacific Time)
+    # Check if slot is in the past (allow booking current hour)
     now = datetime.now(get_local_tz())
-    slot_start = datetime(book_date.year, book_date.month, book_date.day, book_hour, tzinfo=get_local_tz())
-    if slot_start <= now:
+    slot_end = datetime(book_date.year, book_date.month, book_date.day, book_hour, tzinfo=get_local_tz()) + timedelta(hours=1)
+    if slot_end <= now:
         flash('Cannot book a time slot in the past.', 'danger')
         return redirect(url_for('schedule', week=book_date.isoformat()))
 
